@@ -39,6 +39,7 @@ const OBJECT_UNRIDE_SPAN = 5; // レールに乗れないフレーム数を設�
 const PLAYER_RADIUS = 10; // オブジェクトの半径
 const PLAYER_STROKEWEIGHT = 2; // オブジェクトの線の太さ
 const RAIL_STROKEWEIGHT = 3; // レールの太さ
+const PARTICLE_STROKEWEIGHT = 2; // パーティクルの線の太さ
 
 const PLAYER_MANUALACCELERATION = 0.15; // プレイヤーを操作するときの加速度
 const GRAVITY_ACCELERATION = 0.2; // 重力加速度（鉛直下方）
@@ -124,6 +125,7 @@ class System{
 		this.objects = [];
 		this.trashRails = []; // sleepCountが正の場合はここに放り込む. updateを行い、sleepCountに達したら復活させる。
 		this.trashObjects = []; // objectにもsleepCountを用意した方がいいかもとかそういうの
+		this.particles = []; // パーティクル。
 		this.bg = createGraphics(AREA_WIDTH, AREA_HEIGHT);
 		this.prepareBackground();
 		this.player = this.createPlayer();
@@ -149,8 +151,11 @@ class System{
 	}
 	createRails(){
 		// レールたち
-		let _rail0 = new LineRail({railType:NORMAL_R}, 50, 400, 450, 400);
-		this.rails.push(...[_rail0]);
+		let _rail0 = new LineRail({railType:NORMAL_R, stopper:[true, true]}, 50, 400, 750, 400);
+		let _rail1 = new LineRail({railType:ONRAIL_KILL_R}, 250, 80, 250, 440);
+		let _rail2 = new LineRail({railType:OFFRAIL_KILL_R}, 450, 80, 450, 440);
+		let _rail3 = new LineRail({railType:ALL_KILL_R}, 650, 80, 650, 440);
+		this.rails.push(...[_rail0, _rail1, _rail2, _rail3]);
 	}
   createObjects(){
 		// 他のオブジェクトを作るかもしれないとこ
@@ -158,7 +163,7 @@ class System{
 	createPlayer(){
 		// プレイヤー
 		let _player = new Player(100, 100);
-		_player.setLife(Infinity, 30);
+		_player.setLife(Infinity, 60);
 		this.objects.push(_player);
 		return _player;
 	}
@@ -214,6 +219,8 @@ class System{
 		// 線分が途中で消える場合、消えたフラグを立てたうえで、オブジェクトを外し、速度を補正し、そのあとで配列から排除する。
 		// 修正。vanishしたところで排除する。
 		// あー、確かに減っていくイテレータあったらこういうミス（++を--って書いちゃう）減るわね。便利かも。
+
+		// レール
 		for(let index = this.rails.length - 1; index >= 0; index--){
 			let _rail = this.rails[index];
 		  if(_rail.isVanish()){
@@ -224,14 +231,27 @@ class System{
 				}
 			}
 		}
+
+		// オブジェクト
 		for(let index = this.objects.length - 1; index >= 0; index--){
 			let _object = this.objects[index];
 			if(_object.isVanish()){
 				this.objects.splice(index, 1);
+				// パーティクルを発生させる
+				const dt = _object.getParticleData();
+				this.particles.push(new Particle(dt.x, dt.y, dt.size, dt._color, dt.lifeCount, dt.speed, dt.count));
 				if(_object.sleepCount > 0){
 					// sleepさせるobjectを回収する（playerとか）
 					this.trashObjects.push(_object);
 				}
+			}
+		}
+
+		// パーティクルがあったら排除処理
+		for(let index = this.particles.length - 1; index >= 0; index--){
+			let _particle = this.particles[index];
+			if(!_particle.isAlive()){
+				this.particles.splice(index, 1);
 			}
 		}
 	}
@@ -239,6 +259,7 @@ class System{
     // クリエイト部分は一旦なくす。
 		for(let _rail of this.rails){ _rail.update(); }
 		for(let _object of this.objects){ _object.update(); }
+		for(let _particle of this.particles){ _particle.update(); }
 		this.crossingCheck();
 		this.derailmentCheck();
 		this.trashCheck();
@@ -253,6 +274,9 @@ class System{
 		for(let _rail of this.rails){ _rail.draw(); }
 		// オブジェクトの描画
 		for(let _object of this.objects){ _object.draw(); }
+		// パーティクルの描画
+		strokeWeight(PARTICLE_STROKEWEIGHT);
+		for(let _particle of this.particles){ _particle.draw(); }
 	}
 }
 
@@ -774,6 +798,10 @@ class MovingObject{
 
 		this.avoidRail = false; // trueだとレールを避ける. 継承の方で何とかする。
 	}
+	getParticleData(){
+		// パーティクルに関するデータを返す。
+		return {};
+	}
 	setLife(lifeCount, sleepCount = 0){
 		this.lifeCount = lifeCount;
 		this.sleepCount = sleepCount;
@@ -905,6 +933,12 @@ class Player extends MovingObject{
 	  this.radius = PLAYER_RADIUS;
 		this.jumpFlag = false; // ジャンプ
 		this.derailFlag = false; // 自然な離脱
+	}
+	getParticleData(){
+		// パーティクル出すときにデータをここから取得する。
+		return {x:this.position.x, y:this.position.y, size:PLAYER_RADIUS,
+		        _color:(this.belongingData.isBelonging ? color(ONRAIL_PLAYER_COLOR) : color(OFFRAIL_PLAYER_COLOR)),
+					  lifeCount:60, speed:4, count:20};
 	}
 	reconstruction(){
 		this.position.set(this.backup.x, this.backup.y);
@@ -1079,14 +1113,14 @@ class Player extends MovingObject{
 		}
 		if(!this.alive){
 			let prgForVanish = this.properFrameCount / OBJECT_VANISH_SPAN;
-			// ここは工夫したいわね（パーティクル出すとか）
-			// ラスト1フレームで出すとかなら別の所に書かなくて済むし・・ああいやSystemの方に書くべきよね。
-			prgForVanish = prgForVanish * prgForVanish;
+			// ここは工夫したいわね.
+			// とりあえずそのままでいいよ。もしかしたらやられたときのグラフィックを使うとか、なんかするかも。余白、大事。
+			prgForVanish = Math.sqrt(prgForVanish * (2 - prgForVanish));
 			circle(this.position.x, this.position.y, this.radius * 2 * (1.0 - prgForVanish));
 			return;
 		}
 		let prgForAppear = this.properFrameCount / OBJECT_APPEAR_SPAN;
-		// ここprgイージングさせてもいいかも
+		// ここprgイージングさせてもいいかも. 振動とか面白そう。
 		circle(this.position.x, this.position.y, this.radius * 2 * prgForAppear);
 	}
 }
@@ -1097,6 +1131,67 @@ class Player extends MovingObject{
 // やっぱポインターにも従って欲しいかも。動きが作りやすい。
 class Enemy extends MovingObject{
 	constructor(){}
+}
+
+// ------------------------------------------------------------------------------------------------- //
+// particle.
+// とりあえずプレイヤーがやられたときに出す。30フレームくらいで。消えるときのモーションはなくす。とはいえ、
+// なんか用意するかもしれないからとりあえず描画をやめるだけ。
+// まあとりあえず青バージョンと赤バージョンをプレイヤーに持たせてそれぞれ使う前に初期化して運用しましょう。
+
+class Particle{
+	constructor(x, y, size, _color, lifeCount = 60, speed = 4, count = 20){
+    this.color = {r:red(_color), g:green(_color), b:blue(_color)};
+		this.center = {x:x, y:y};
+		this.size = size;
+		this.lifeCount = lifeCount;
+		this.speed = speed;
+		this.defaultCount = count;
+		this.rotationSpeed = Math.PI / 45;
+		this.initialize();
+	}
+	initialize(){
+		// 初期化
+		this.properFrameCount = 0;
+		this.count = this.defaultCount + random(-5, 5); // 整数である必要はない。
+		this.rotationAngle = 0;
+		this.moveSet = [];
+		this.prepareMoveSet();
+		this.alive = true;
+	}
+	isAlive(){
+		return this.alive;
+	}
+	prepareMoveSet(){
+		for(let i = 0; i < this.count; i++){
+			this.moveSet.push({x:0, y:0, speed:this.speed + random(-2, 2), direction:random(Math.PI * 2)});
+		}
+	}
+	update(){
+		if(!this.alive){ return; }
+		for(let m of this.moveSet){
+			m.x += m.speed * cos(m.direction);
+			m.y += m.speed * sin(m.direction);
+			m.speed *= 0.9;
+		}
+		this.rotationAngle += this.rotationSpeed;
+		this.properFrameCount++;
+		if(this.properFrameCount === this.lifeCount){
+			this.alive = false;
+		}
+	}
+	draw(){
+		if(!this.alive){ return; }
+		const prg = (this.lifeCount - this.properFrameCount) / this.lifeCount;
+		stroke(this.color.r, this.color.g, this.color.b, Math.floor(prg * 255));
+		const c = cos(this.rotationAngle) * this.size;
+		const s = sin(this.rotationAngle) * this.size;
+		for(let m of this.moveSet){
+			const cx = this.center.x + m.x;
+			const cy = this.center.y + m.y;
+      quad(cx + c, cy + s, cx - s, cy + c, cx - c, cy - s, cx + s, cy - c);
+		}
+	}
 }
 
 // ------------------------------------------------------------------------------------------------- //
