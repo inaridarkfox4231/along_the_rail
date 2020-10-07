@@ -17,17 +17,15 @@
 // いろいろ、lifeとか、動きについても手を付けてないし、んーーーーんーーーー
 // とりあえず一区切り。
 
+// ------------------------------------------------------------------------------------------------- //
+// constants.
+
 const AREA_WIDTH = 800;
 const AREA_HEIGHT = 640;
 const AREA_RADIUS = Math.sqrt(Math.pow(AREA_WIDTH, 2) + Math.pow(AREA_HEIGHT, 2)) * 0.5;
 
-//const RAIL_CAPACITY = 15;
-//const OBJECT_CAPACITY = 15;
-
-//const RAIL_CREATE_SPAN = 30;
 const RAIL_APPEAR_SPAN = 30;  // 出現モーション
 const RAIL_VANISH_SPAN = 30; // 消滅モーション
-//const OBJECT_CREATE_SPAN = 30;
 const OBJECT_APPEAR_SPAN = 30; // 出現モーション
 const OBJECT_VANISH_SPAN = 30; // 消滅モーション
 
@@ -82,6 +80,9 @@ const OFFRAIL_PLAYER_COLOR = "tomato"; // レールに乗ってない時のオ�
 
 // typeプロパティをやめて、reverseにする。reverseがtrueの場合は往復するが、そうでない場合は単純に1を足したり引いたりする。
 
+// ------------------------------------------------------------------------------------------------- //
+// main code.
+
 let mySystem;
 
 function setup(){
@@ -114,6 +115,9 @@ function draw(){
 // 一定時間で消滅します。sleepCountを設定すると元の場所に全く同じパラメータで復活します。
 // backupのデータをいじれば違うデータを元に復活させることもできるけど・・そうなるともうオブジェクトプールだわね。
 
+// ------------------------------------------------------------------------------------------------- //
+// system.
+
 class System{
 	constructor(){
 		this.rails = [];
@@ -123,7 +127,7 @@ class System{
 		this.bg = createGraphics(AREA_WIDTH, AREA_HEIGHT);
 		this.prepareBackground();
 		this.player = this.createPlayer();
-		this.createLineRail();
+		this.createRails();
 		this.properFrameCount = 0;
 	}
 	prepareBackground(){
@@ -143,41 +147,16 @@ class System{
 			}
 		}
 	}
-	createLineRail(){
-		//if(this.rails.length === RAIL_CAPACITY){ return; }
-    let _rail0 = new LineRail({railType:NORMAL_R, stopper:[true, true]}, 50, 200, 250, 300);
-		let _rail1 = new LineRail({railType:NORMAL_R}, 200, 50, 50, 300);
-		let _rail2 = new LineRail({railType:ALL_KILL_R}, 5, 5, 400, 5);
-		let _rail3 = new LineRail({railType:ALL_KILL_R}, 5, 5, 5, 480);
-		let _rail4 = new LineRail({railType:FORCE_R, pointerSpeed:4, pointerReverse:true, stopper:[false, true]}, 240, 400, 740, 400);
-		let _rail5 = new LineRail({railType:BIND_R, pointerSpeed:8, pointerReverse:false, stopper:[true, false]}, 300, 500, 300, 80);
-		//let _rail6 = new LineRail({railType:ONRAIL_KILL_R}, 400, 40, 400, 600);
-		//let _rail7 = new LineRail({railType:OFFRAIL_KILL_R}, 600, 40, 600, 600);
-		let _rail8 = new CircleRail({railType:FORCE_R, pointerSpeed:4, pointerReverse:false}, 100, 500, 80);
-		let _rail9 = new ArcRail({railType:NORMAL_R, stopper:[true, true]}, 500, 400, 200, -PI * 0.5, PI);
-		let _rail10 = new LineRail({railType:ACCELL_R, acceleration:createVector(0, 0.3)}, 600, 20, 400, 220);
-		this.rails.push(...[_rail0, _rail1, _rail2, _rail3, _rail4, _rail5, _rail8, _rail9, _rail10]);
-		//this.rails.push(newRail);
+	createRails(){
+		// レールたち
+		let _rail0 = new LineRail({railType:NORMAL_R}, 50, 400, 450, 400);
+		this.rails.push(...[_rail0]);
 	}
-	createCircleRail(){
-		//if(this.rails.length === RAIL_CAPACITY){ return; }
-
-		//this.rails.push(newCircle);
-	}
-	createArcRail(){
-		//if(this.rails.length === RAIL_CAPACITY){ return; }
-
-		//this.rails.push(newArc);
-	}
-  createObject(){
-		//if(this.objects.length === OBJECT_CAPACITY){ return; }
-		// ここでオブジェクトを作る。位置とか指定する。
-		//let p = createVector(AREA_WIDTH * (0.4 + 0.2 * Math.random()), AREA_HEIGHT * (0.4 + 0.2 * Math.random()));
-		//let newObject = new MovingObject(p, Math.random() * 2 * Math.PI, 2 + 3 * Math.random());
-		// プレイヤーを作る。
-		//this.objects.push(newObject);
+  createObjects(){
+		// 他のオブジェクトを作るかもしれないとこ
 	}
 	createPlayer(){
+		// プレイヤー
 		let _player = new Player(100, 100);
 		_player.setLife(Infinity, 30);
 		this.objects.push(_player);
@@ -276,6 +255,9 @@ class System{
 		for(let _object of this.objects){ _object.draw(); }
 	}
 }
+
+// ------------------------------------------------------------------------------------------------- //
+// rail.
 
 // 動くものと動かないもの
 // 障害物と乗っかるレール
@@ -760,6 +742,9 @@ class RailPointer{
 	}
 }
 
+// ------------------------------------------------------------------------------------------------- //
+// Moving object.
+
 // これをどうするかっていう。
 // updateとdraw.
 // プレイヤーのupdate:レールの種類に応じた処理, draw:今まで通り、とりあえず。
@@ -1114,6 +1099,9 @@ class Enemy extends MovingObject{
 	constructor(){}
 }
 
+// ------------------------------------------------------------------------------------------------- //
+// interaction.
+
 // キー入力。
 function keyPressed(){
 	if(keyCode === 32){
@@ -1125,71 +1113,3 @@ function keyPressed(){
 		mySystem.player.setDerailFlag();
 	}
 }
-
-/*
-レール作りのメソッドはこの辺に避難させとく
-// ここでレールを作る。点とか指定する。速度とか。とりあえずデモでは端っこで折り返して勝手に消える感じでいいんじゃない。
-let p1, p2;
-if(Math.random() < 0.5){
-	p1 = createVector(AREA_WIDTH * (0.1 + 0.15 * Math.random()), AREA_HEIGHT * (0.05 + 0.9 * Math.random()));
-	p2 = createVector(AREA_WIDTH * (0.9 - 0.15 * Math.random()), AREA_HEIGHT * (0.05 + 0.9 * Math.random()));
-}else{
-	p1 = createVector(AREA_WIDTH * (0.05 + 0.9 * Math.random()), AREA_HEIGHT * (0.1 + 0.15 * Math.random()));
-	p2 = createVector(AREA_WIDTH * (0.05 + 0.9 * Math.random()), AREA_HEIGHT * (0.9 - 0.15 * Math.random()));
-}
-let direction = p5.Vector.sub(p2, p1).heading() + Math.PI * 0.5;
-let speed = 1 + Math.random();
-let newRail = new LineRail(NORMAL_R, 240 + 120 * Math.random(), p1, p2, p5.Vector.fromAngle(direction, speed));
-newRail.setMove((_line) => {
-	const {p1, p2} = _line;
-	const c1 = (p1.x < 0 || p1.x > AREA_WIDTH || p1.y < 0 || p1.y > AREA_HEIGHT);
-	const c2 = (p2.x < 0 || p2.x > AREA_WIDTH || p2.y < 0 || p2.y > AREA_HEIGHT);
-	if((c1 || c2) && _line.waitCount === 0){
-		_line.velocity.mult(-1);
-	}
-});
-
-let c = createVector(AREA_WIDTH * (0.3 + Math.random() * 0.4), AREA_HEIGHT * (0.3 + Math.random() * 0.4));
-let v = p5.Vector.fromAngle(Math.PI * 2 * Math.random(), 2.5);
-let r = Math.min(AREA_WIDTH, AREA_HEIGHT) * (0.05 + 0.2 * Math.random());
-let newCircle = new CircleRail(NORMAL_R, 360, c, v, r);
-newCircle.setMove((_circle) => {
-	_circle.center.add(_circle.velocity);
-	const {x, y} = _circle.center;
-	const {x:vx, y:vy} = _circle.velocity;
-	const r = _circle.radius;
-	if(x - r < 0 || x + r > AREA_WIDTH){
-		const diffX = (x - r < 0 ? (r - x) / vx : (AREA_WIDTH - r - x) / vx);
-		_circle.center.add(p5.Vector.mult(_circle.velocity, diffX));
-		_circle.velocity.x *= -1;
-	}else if(y - r < 0 || y + r > AREA_HEIGHT){
-		const diffY = (y - r < 0 ? (r - y) / vy : (AREA_HEIGHT - r - y) / vy);
-		_circle.center.add(p5.Vector.mult(_circle.velocity, diffY));
-		_circle.velocity.y *= -1;
-	}
-})
-
-let c = createVector(AREA_WIDTH * (0.3 + Math.random() * 0.4), AREA_HEIGHT * (0.3 + Math.random() * 0.4));
-let v = p5.Vector.fromAngle(Math.PI * 2 * Math.random(), 2.5);
-let r = Math.min(AREA_WIDTH, AREA_HEIGHT) * (0.05 + 0.2 * Math.random());
-let newArc = new ArcRail(NORMAL_R, 330, c, v, r, 2 * Math.PI * Math.random(), Math.PI * (0.2 + 1.6 * Math.random()),
-												 (1 + Math.random()) * random([1, -1]) * 0.01);
-newArc.setMove((_arc) => {
-	_arc.t1 += _arc.angleSpeed;
-	_arc.t2 += _arc.angleSpeed;
-	_arc.center.add(_arc.velocity);
-	// めんどくさいので円の場合の反射処理を援用する。どうせ最終的な実装では使わないので・・
-	const {x, y} = _arc.center;
-	const {x:vx, y:vy} = _arc.velocity;
-	const r = _arc.radius;
-	if(x - r < 0 || x + r > AREA_WIDTH){
-		const diffX = (x - r < 0 ? (r - x) / vx : (AREA_WIDTH - r - x) / vx);
-		_arc.center.add(p5.Vector.mult(_arc.velocity, diffX));
-		_arc.velocity.x *= -1;
-	}else if(y - r < 0 || y + r > AREA_HEIGHT){
-		const diffY = (y - r < 0 ? (r - y) / vy : (AREA_HEIGHT - r - y) / vy);
-		_arc.center.add(p5.Vector.mult(_arc.velocity, diffY));
-		_arc.velocity.y *= -1;
-	}
-})
-*/
