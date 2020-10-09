@@ -39,6 +39,7 @@ const OBJECT_UNRIDE_SPAN = 5; // レールに乗れないフレーム数を設�
 const PLAYER_RADIUS = 10; // オブジェクトの半径
 const PLAYER_STROKEWEIGHT = 2; // オブジェクトの線の太さ
 const RAIL_STROKEWEIGHT = 3; // レールの太さ
+const BINDRAIL_STROKEWEIGHT = 1; // BINDの場合に両側に引く補助線の太さ。
 const PARTICLE_STROKEWEIGHT = 2; // パーティクルの線の太さ
 
 const PLAYER_MANUALACCELERATION = 0.15; // プレイヤーを操作するときの加速度
@@ -57,13 +58,14 @@ const SIGN_HALFLENGTH = 6; // ポインターとかストッパーの長さの�
 // railType.
 const NORMAL_R = 0; // 通常レール
 const FORCE_R = 1;  // 移動させられるレール（離脱可能）
-const BIND_R = 2;   // 移動させられるレール（離脱不可）
-const ACCELL_R = 3; // 加速度がかかるレール（離脱可能）
+// const BIND_R = 2;   // 移動させられるレール（離脱不可） // 廃止。個別に指定する。
+// そしてBINDの場合は両側に細い線を引いて区別する（これがめんどくさい・・）
+const ACCELL_R = 2; // 加速度がかかるレール（離脱可能）
 // 以下のレールは実装時はオーラをまとわせて分かりやすくする。
-const ALL_KILL_R = 4;   // 通過すると即死のレール
-const ONRAIL_KILL_R = 5;  // レールに乗ってない時通過できるが、レールに乗っているとき通過すると即死のレール
-const OFFRAIL_KILL_R = 6; // レールに乗っていると通過できるが、レールに乗っていないとき通過すると即死のレール
-const GOAL_R = 7; // ゴールライン。通過するとステージクリア。ライムがいいなーライムにしよ。
+const ALL_KILL_R = 3;   // 通過すると即死のレール
+const ONRAIL_KILL_R = 4;  // レールに乗ってない時通過できるが、レールに乗っているとき通過すると即死のレール
+const OFFRAIL_KILL_R = 5; // レールに乗っていると通過できるが、レールに乗っていないとき通過すると即死のレール
+const GOAL_R = 6; // ゴールライン。通過するとステージクリア。ライムがいいなーライムにしよ。
 // 条件を満たすと現れるゴールライン、っていうのもいいね。仕事中に考えてた。
 
 // ダメージレールのフラグ
@@ -73,7 +75,7 @@ const ONRAIL_D = 2; // レールに乗っているとき即死(red)
 const OFFRAIL_D = 3; // レールに乗っていない時即死(blue)
 
 // これ使う。だからメソッドは廃止で。
-const RAIL_PALETTE = ["white", "skyblue", "lightgreen", "silver", "magenta", "red", "blue", "lime"];
+const RAIL_PALETTE = ["silver", "lightgreen", "pink", "magenta", "red", "blue", "lime"];
 
 const ONRAIL_PLAYER_COLOR = "dodgerblue"; // レールに乗ってるときのオブジェクトの色（青）
 const OFFRAIL_PLAYER_COLOR = "tomato"; // レールに乗ってない時のオブジェクトの色（赤)
@@ -151,11 +153,15 @@ class System{
 	}
 	createRails(){
 		// レールたち
-		let _rail0 = new LineRail({railType:NORMAL_R, stopper:[true, true]}, 50, 400, 750, 400);
+		let _rail0 = new LineRail({stopper:[true, true]}, 50, 400, 750, 400);
 		let _rail1 = new LineRail({railType:ONRAIL_KILL_R}, 250, 80, 250, 440);
 		let _rail2 = new LineRail({railType:OFFRAIL_KILL_R}, 450, 80, 450, 440);
 		let _rail3 = new LineRail({railType:ALL_KILL_R}, 650, 80, 650, 440);
-		this.rails.push(...[_rail0, _rail1, _rail2, _rail3]);
+		let _rail4 = new LineRail({bind:true}, 280, 340, 480, 340);
+		let _rail5 = new LineRail({}, 320, 60, 440, 440);
+		let _rail6 = new ArcRail({bind:true}, 380, 220, 80, PI/2, PI);
+		let _rail7 = new CircleRail({}, 150, 200, 80);
+		this.rails.push(...[_rail3, _rail1, _rail2, _rail0, _rail4, _rail5, _rail6, _rail7]);
 	}
   createObjects(){
 		// 他のオブジェクトを作るかもしれないとこ
@@ -179,8 +185,9 @@ class System{
 	crossingCheck(){
 		// 直線を横切る物体あったら乗っかる。
 		for(let _object of this.objects){
-			// 待ち状態のとき、visibleでないとき、レールに乗らないとき。
-			if(_object.waitCount > 0 || !_object.isVisible() || _object.avoidRail){ continue; }
+			// visibleでないとき、レールに乗らないとき。待ち状態はやめよう。
+			// 待ち状態でもダメージレールの影響は受ける。それはreactionメソッドで処理する。
+			if(!_object.isVisible() || _object.avoidRail){ continue; }
 			for(let _rail of this.rails){
 				// どれかに乗っかるならそこに乗っかる。あとは調べない。breakして次の物体に移る。
 				// _objectのpositionとpreviousPositionを結ぶ線分が横切るかどうかで判定する。外積の積を取る。
@@ -190,7 +197,7 @@ class System{
 				if(proportion < 0 || proportion > 1){ continue; }
         // このタイミングで交叉していることが確定するのでreactionしてsetRailするなりダメージするなりやる。
 				_object.reaction(_rail, proportion);
-				break;
+				//break; // どうやらこれか・・な？jumpで銀レールと接触したのと同じタイミングで紫レールと接触してたみたい。続きはmemoで。
 			}
 		}
 	}
@@ -331,8 +338,12 @@ class Rail{
 	}
 	setAttribute(param){
 		if(param.stopper !== undefined){
-			this.stopper = [param.stopper[0], param.stopper[1]];
+			this.stopper = [param.stopper[0], param.stopper[1]]; // stopperがtrueになる場合はparamで指定する。
 		}
+		if(param.bind !== undefined){
+			this.bind = param.bind; // bindがtrueの場合はparamで指定する。
+		}
+		if(param.railType === undefined){ param.railType = NORMAL_R; } // 無記載ならノーマルで固定（デフォルト）
 		switch(param.railType){
 			case NORMAL_R:
 			  break;
@@ -340,11 +351,7 @@ class Rail{
 			  this.force = true;
 				this.pointer = new RailPointer(param.pointerSpeed, param.pointerReverse);
 				break;
-			case BIND_R:
-			  this.force = true;
-				this.bind = true;
-				this.pointer = new RailPointer(param.pointerSpeed, param.pointerReverse);
-			  break;
+			// bindはレールのタイプから除外。何でもありにする。
 			case ACCELL_R:
 			  this.acceleration = param.acceleration;
 				this.accelePointingVector = p5.Vector.mult(this.acceleration, SIGN_HALFLENGTH * 2 / this.acceleration.mag());
@@ -379,6 +386,11 @@ class Rail{
 	}
 	isVanish(){
 		return this.vanish;
+	}
+	isPrevious(_prevRail){
+		// prevRailが定義されていて自分自身であるときにのみtrueを返すやつ
+		if(_prevRail === undefined){ return false; }
+		return _prevRail.id === this.id;
 	}
 	appearCheck(){
 		if(this.properFrameCount < RAIL_APPEAR_SPAN){
@@ -539,14 +551,16 @@ class LineRail extends Rail{
 		return p5.Vector.lerp(this.p1, this.p2, proportion);
 	}
 	getCrossing(_object){
+		if(this.isPrevious(_object.belongingData.prevRail)){ return -1; } // レールから離脱するとき
+		// 0から0でない、ならスルーで、0でないから0、なら交差、でいいかな。
 		const {x:a, y:b} = this.p1;
 		const {x:c, y:d} = this.p2;
 		const {x:e, y:f} = this.previousP1;
 		const {x:g, y:h} = this.previousP2;
 		const {x:u, y:v} = _object.position;
 		const {x:w, y:z} = _object.previousPosition;
-		const flag_previous = ((u - a) * (d - b) > (v - b) * (c - a) ? 1 : -1);
-		const flag_current = ((w - e) * (h - f) > (z - f) * (g - e) ? 1 : -1);
+		const flag_previous = ((w - e) * (h - f) > (z - f) * (g - e) ? 1 : -1);
+		const flag_current = ((u - a) * (d - b) > (v - b) * (c - a) ? 1 : -1);
 		let proportion = -1;
 		if(flag_previous * flag_current < 0){
 			const det = (c - a) * (v - z) - (u - w) * (d - b);
@@ -568,6 +582,14 @@ class LineRail extends Rail{
 	}
 	drawRail(){
 		line(this.p1.x, this.p1.y, this.p2.x, this.p2.y);
+		if(this.bind){
+			const u = (this.p1.y - this.p2.y) * 4 / this.length;
+			const v = (this.p2.x - this.p1.x) * 4 / this.length;
+			strokeWeight(BINDRAIL_STROKEWEIGHT);
+			line(this.p1.x + u, this.p1.y + v, this.p2.x + u, this.p2.y + v);
+			line(this.p1.x - u, this.p1.y - v, this.p2.x - u, this.p2.y - v);
+			strokeWeight(RAIL_STROKEWEIGHT);
+		}
 	}
 	drawAppearingRail(prg){
 		prg = prg * prg * (3.0 - 2.0 * prg);
@@ -601,6 +623,7 @@ class CircleRail extends Rail{
 		return createVector(this.center.x + this.radius * Math.cos(angle), this.center.y + this.radius * Math.sin(angle));
 	}
 	getCrossing(_object){
+		if(this.isPrevious(_object.belongingData.prevRail)){ return -1; } // レールから離脱するとき
 		const flag_previous = (p5.Vector.dist(this.previousCenter, _object.previousPosition) > this.radius ? 1 : -1);
 		const flag_current = (p5.Vector.dist(this.center, _object.position) > this.radius ? 1 : -1);
 		let proportion = -1;
@@ -636,6 +659,12 @@ class CircleRail extends Rail{
 	}
 	drawRail(){
 		circle(this.center.x, this.center.y, this.radius * 2);
+		if(this.bind){
+			strokeWeight(BINDRAIL_STROKEWEIGHT);
+			circle(this.center.x, this.center.y, this.radius * 2 - 8);
+		  circle(this.center.x, this.center.y, this.radius * 2 + 8);
+			strokeWeight(RAIL_STROKEWEIGHT);
+		}
 	}
 	drawAppearingRail(prg){
 		prg = prg * prg * (3.0 - 2.0 * prg);
@@ -682,7 +711,8 @@ class ArcRail extends Rail{
 		return createVector(this.center.x + this.radius * Math.cos(angle), this.center.y + this.radius * Math.sin(angle));
 	}
 	getCrossing(_object){
-		// 冗長なのはわかってるんだよ・・
+		if(this.isPrevious(_object.belongingData.prevRail)){ return -1; } // レールから離脱するとき
+		// いや・・うーん、前のフレームで乗っている、の方が正確かも。
 		const flag_previous = (p5.Vector.dist(this.previousCenter, _object.previousPosition) > this.radius ? 1 : -1);
 		const flag_current = (p5.Vector.dist(this.center, _object.position) > this.radius ? 1 : -1);
 		let proportion = -1;
@@ -703,9 +733,15 @@ class ArcRail extends Rail{
 			const l2 = (-coeffB - coeffD) / coeffA;
 			const l = (l1 > 0 && l1 < 1 ? l1 : l2);
 			let direction = p5.Vector.sub(p5.Vector.lerp(p, q, l), c).heading(); // -Math.PI～Math.PIです。
-			// t～t+2PIに落とす。
-			if(direction < this.t1){ direction += 2 * Math.PI * (Math.floor((this.t1 - direction) * 0.5 / Math.PI) + 1); }
-			if(direction > this.t1 + 2 * Math.PI){ direction -= 2 * Math.PI * (Math.floor((direction - this.t1 - 2 * Math.PI) * 0.5 / Math.PI) + 1); }
+			// t～t+2PIに落とす。ここの計算でなんか不備があるっぽい。まあそうよね。
+			// 逆か？this.t1を-PI～PIに落として、それ以上だったらthis.t1と落とした値との差（2PIの整数倍）を使って補正・・的な。
+			// 計算できた。帰ったら修正する。やっぱ適当に計算したらあかんね。Math.ceilを使うみたいです。
+			if(direction < this.t1){
+				direction += 2 * Math.PI * Math.ceil((this.t1 - direction) * 0.5 / Math.PI);
+			}
+			if(direction > this.t1 + 2 * Math.PI){
+				direction -= 2 * Math.PI * Math.ceil((direction - this.t1 - 2 * Math.PI) * 0.5 / Math.PI);
+			}
 			proportion = (direction - this.t1) / (this.t2 - this.t1);
 		}
 		return proportion;
@@ -724,6 +760,12 @@ class ArcRail extends Rail{
 	}
 	drawRail(){
 		arc(this.center.x, this.center.y, this.radius * 2, this.radius * 2, this.t1, this.t2);
+		if(this.bind){
+			strokeWeight(BINDRAIL_STROKEWEIGHT);
+			arc(this.center.x, this.center.y, this.radius * 2 - 8, this.radius * 2 - 8, this.t1, this.t2);
+		  arc(this.center.x, this.center.y, this.radius * 2 + 8, this.radius * 2 + 8, this.t1, this.t2);
+			strokeWeight(RAIL_STROKEWEIGHT);
+		}
 	}
 	drawAppearingRail(prg){
 		prg = prg * prg * (3.0 - 2.0 * prg);
@@ -781,7 +823,7 @@ class MovingObject{
 	constructor(x, y){
 		this.position = createVector(x, y);
 		this.previousPosition = this.position.copy();
-		this.belongingData = {isBelonging:false, rail:undefined, proportion:undefined, sign:0};
+		this.belongingData = {isBelonging:false, prevRail:undefined, rail:undefined, proportion:undefined, sign:0};
 
 		this.properFrameCount = 0; // 図形が回転するならそういうのをとかなんかそんなの
 		this.alive = true;
@@ -855,8 +897,6 @@ class MovingObject{
 	derailment(){
 		// レールから離脱する。
 		// 速度はそのまま。
-		//const direction = p5.Vector.sub(this.position, this.previousPosition).heading();
-		//this.velocity.set(p5.Vector.fromAngle(direction, this.speed));
 		this.belongingData.isBelonging = false;
 		this.belongingData.rail = undefined;
 		this.belongingData.proportion = undefined;
@@ -905,7 +945,10 @@ class MovingObject{
 		// appearするかどうかチェック。その間properFrameCountは変化なし。
 		if(!this.visible){ this.appearCheck(); return; }
 
+    // backupはここですね。
 		this.previousPosition.set(this.position.x, this.position.y);
+		this.belongingData.prevRail = this.belongingData.rail; // 直前に乗っていたレールの情報
+
 		if(this.belongingData.isBelonging){
 			// 所属する直線がある場合の処理。具体的には直線がスピードを指定するのでそれに従って直線に沿って動く。
 			this.onRailMove();
@@ -949,6 +992,7 @@ class Player extends MovingObject{
 		// 乗った後は知らない。
 		switch(_rail.damageFlag){
 			case NONE_D:
+			  if(this.waitCount > 0){ return; } // 待ち状態で通常のレールに乗る場合、処理は行わない。
 			  this.setRail(_rail, proportion); break;
 			case ALL_D:
 			  this.kill(); break;
