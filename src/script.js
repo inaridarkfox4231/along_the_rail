@@ -160,15 +160,19 @@ class System{
 		let _rail4 = new LineRail({bind:true}, 280, 340, 480, 340);
 		let _rail5 = new LineRail({}, 320, 60, 440, 440);
 		let _rail6 = new ArcRail({bind:true}, 380, 220, 80, PI/2, PI);
-		let _rail7 = new CircleRail({}, 150, 200, 80);
-		this.rails.push(...[_rail3, _rail1, _rail2, _rail0, _rail4, _rail5, _rail6, _rail7]);
+		let _rail7 = new LineRail({}, 50, 300, 340, 300);
+		let _rail8 = new LineRail({}, 50, 305, 340, 305);
+		let _rail9 = new LineRail({}, 50, 310, 340, 310);
+		let _rail10 = new LineRail({}, 50, 315, 340, 315);
+		let _rail11 = new LineRail({}, 50, 340, 340, 340);
+		this.rails.push(...[_rail3, _rail1, _rail2, _rail0, _rail4, _rail5, _rail6, _rail7, _rail8, _rail9, _rail10, _rail11]);
 	}
   createObjects(){
 		// 他のオブジェクトを作るかもしれないとこ
 	}
 	createPlayer(){
 		// プレイヤー
-		let _player = new Player(100, 100);
+		let _player = new Player(100, 10);
 		_player.setLife(Infinity, 60);
 		this.objects.push(_player);
 		return _player;
@@ -188,6 +192,7 @@ class System{
 			// visibleでないとき、レールに乗らないとき。待ち状態はやめよう。
 			// 待ち状態でもダメージレールの影響は受ける。それはreactionメソッドで処理する。
 			if(!_object.isVisible() || _object.avoidRail){ continue; }
+			let targets = [];
 			for(let _rail of this.rails){
 				// どれかに乗っかるならそこに乗っかる。あとは調べない。breakして次の物体に移る。
 				// _objectのpositionとpreviousPositionを結ぶ線分が横切るかどうかで判定する。外積の積を取る。
@@ -196,8 +201,18 @@ class System{
 				const proportion = _rail.getCrossing(_object);
 				if(proportion < 0 || proportion > 1){ continue; }
         // このタイミングで交叉していることが確定するのでreactionしてsetRailするなりダメージするなりやる。
-				_object.reaction(_rail, proportion);
-				//break; // どうやらこれか・・な？jumpで銀レールと接触したのと同じタイミングで紫レールと接触してたみたい。続きはmemoで。
+				targets.push({rail:_rail, proportion:proportion,
+					            distWithPrev:p5.Vector.dist(_object.previousPosition, _rail.calcPositionFromProportion(proportion))});
+			}
+			if(targets.length === 0){ continue; }
+			// ほとんどの場合長さ1なのでね。
+			if(targets.length === 1){ _object.reaction(targets[0].rail, targets[0].proportion); continue; }
+			// 同じフレーム内で複数のレールをまたいだ場合、previousPositionに近いものを優先して判定する。
+			// ダメージレールでkillされるか通常のレールに乗るかした時点で処理を終了する。
+			targets.sort((t1, t2) => t1.distWithPrev - t2.distWithPrev);
+			for(let i = 0; i < targets.length; i++){
+				const tgt = targets[i];
+				if(_object.reaction(tgt.rail, tgt.proportion)){ break; }
 			}
 		}
 	}
@@ -989,18 +1004,19 @@ class Player extends MovingObject{
 	}
 	reaction(_rail, proportion){
 		// ダメージかどうかで分ける。
-		// 乗った後は知らない。
+		// レールに乗るか、killが成立した場合だけtrueを返す。何も起こらないならfalseを返す。
 		switch(_rail.damageFlag){
 			case NONE_D:
-			  if(this.waitCount > 0){ return; } // 待ち状態で通常のレールに乗る場合、処理は行わない。
-			  this.setRail(_rail, proportion); break;
+			  if(this.waitCount > 0){ return false; } // 待ち状態で通常のレールに乗る場合、処理は行わない。
+			  this.setRail(_rail, proportion); return true;
 			case ALL_D:
-			  this.kill(); break;
+			  this.kill(); return true;
 			case ONRAIL_D:
-			  if(this.belongingData.isBelonging){ this.kill(); } break;
+			  if(this.belongingData.isBelonging){ this.kill(); return true; } break;
 			case OFFRAIL_D:
-			  if(!this.belongingData.isBelonging){ this.kill(); } break;
+			  if(!this.belongingData.isBelonging){ this.kill(); return true; } break;
 		}
+		return false;
 	}
 	setDerailFlag(){
 		// キー入力で使う（シフト）
