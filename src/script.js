@@ -56,10 +56,9 @@ const SIGN_HALFLENGTH = 6; // ポインターとかストッパーの長さの�
 // 共通のメソッドで決める。staticで。
 
 // railType.
+// BINDの場合は両側に細い線を引いて区別する（これがめんどくさい・・）. BINDはレールタイプから廃止。
 const NORMAL_R = 0; // 通常レール
 const FORCE_R = 1;  // 移動させられるレール（離脱可能）
-// const BIND_R = 2;   // 移動させられるレール（離脱不可） // 廃止。個別に指定する。
-// そしてBINDの場合は両側に細い線を引いて区別する（これがめんどくさい・・）
 const ACCELL_R = 2; // 加速度がかかるレール（離脱可能）
 // 以下のレールは実装時はオーラをまとわせて分かりやすくする。
 const ALL_KILL_R = 3;   // 通過すると即死のレール
@@ -160,12 +159,10 @@ class System{
 		let _rail4 = new LineRail({bind:true}, 280, 340, 480, 340);
 		let _rail5 = new LineRail({}, 320, 60, 440, 440);
 		let _rail6 = new ArcRail({bind:true}, 380, 220, 80, PI/2, PI);
-		let _rail7 = new LineRail({}, 50, 300, 340, 300);
-		let _rail8 = new LineRail({}, 50, 305, 340, 305);
-		let _rail9 = new LineRail({}, 50, 310, 340, 310);
-		let _rail10 = new LineRail({}, 50, 315, 340, 315);
-		let _rail11 = new LineRail({}, 50, 340, 340, 340);
-		this.rails.push(...[_rail3, _rail1, _rail2, _rail0, _rail4, _rail5, _rail6, _rail7, _rail8, _rail9, _rail10, _rail11]);
+		let _rail7 = new LineRail({railType:FORCE_R, pointerSpeed:4, pointerReverse:true}, 100, 200, 230, 300);
+		let _rail8 = new LineRail({railType:FORCE_R, pointerSpeed:4, pointerReverse:true}, 230, 200, 100, 300);
+		let _rail9 = new LineRail({railType:ACCELL_R, acceleration:createVector(0.2, 0), bind:true}, 50, 320, 350, 360);
+		this.rails.push(...[_rail3, _rail1, _rail2, _rail0, _rail4, _rail5, _rail6, _rail7, _rail8, _rail9]);
 	}
   createObjects(){
 		// 他のオブジェクトを作るかもしれないとこ
@@ -986,7 +983,7 @@ class MovingObject{
 class Player extends MovingObject{
 	constructor(x, y){
 		super(x, y);
-		this.backup = {x:x, y:y};
+		this.backup = {x:x, y:y}; // セーブポイントからの再開とかに使うかも、しれない。
 		// この2つはPlayer用でそのうち移す
 	  this.radius = PLAYER_RADIUS;
 		this.jumpFlag = false; // ジャンプ
@@ -1001,6 +998,8 @@ class Player extends MovingObject{
 	reconstruction(){
 		this.position.set(this.backup.x, this.backup.y);
 		this.previousPosition.set(this.position);
+		this.jumpFlag = false;
+		this.derailFlag = false;
 	}
 	reaction(_rail, proportion){
 		// ダメージかどうかで分ける。
@@ -1182,6 +1181,18 @@ class Player extends MovingObject{
 		let prgForAppear = this.properFrameCount / OBJECT_APPEAR_SPAN;
 		// ここprgイージングさせてもいいかも. 振動とか面白そう。
 		circle(this.position.x, this.position.y, this.radius * 2 * prgForAppear);
+	}
+}
+
+class SampleObject extends MovingObject{
+	constructor(){
+		super();
+	}
+	reaction(){
+
+	}
+	draw(){
+
 	}
 }
 
