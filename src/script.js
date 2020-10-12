@@ -152,6 +152,7 @@ class System{
 	}
 	createRails(){
 		// レールたち
+		/*
 		let _rail0 = new LineRail({stopper:[true, true]}, 50, 400, 750, 400);
 		let _rail1 = new LineRail({railType:ONRAIL_KILL_R}, 250, 80, 250, 440);
 		let _rail2 = new LineRail({railType:OFFRAIL_KILL_R}, 450, 80, 450, 440);
@@ -163,6 +164,19 @@ class System{
 		let _rail8 = new LineRail({railType:FORCE_R, pointerSpeed:4, pointerReverse:true}, 230, 200, 100, 300);
 		let _rail9 = new LineRail({railType:ACCELL_R, acceleration:createVector(0.2, 0), bind:true}, 50, 320, 350, 360);
 		this.rails.push(...[_rail3, _rail1, _rail2, _rail0, _rail4, _rail5, _rail6, _rail7, _rail8, _rail9]);
+		*/
+		let _rail0 = new LineRail({}, 50, 400, 250, 360);
+		let _rail1 = new LineRail({tough:1, sleep:60}, 100, 360, 200, 460);
+		let _rail2 = new LineRail({tough:1, sleep:60}, 200, 360, 100, 460);
+		let _rail3 = new LineRail({tough:1, sleep:60}, 300, 400, 360, 420);
+		let _rail4 = new LineRail({tough:1, sleep:60}, 380, 400, 440, 420);
+		let _rail5 = new LineRail({tough:1, sleep:60}, 460, 400, 520, 420);
+		let _rail6 = new LineRail({tough:1, sleep:60}, 560, 400, 660, 420);
+		_rail0.setMove((_rail) => {
+			_rail.p1.set(50, 100 + Math.abs((_rail.properFrameCount % 600) - 300));
+      _rail.p2.set(250, 60 + Math.abs((_rail.properFrameCount % 600) - 300));
+		})
+		this.rails.push(...[_rail0, _rail1, _rail2, _rail3, _rail4, _rail5, _rail6]);
 	}
   createObjects(){
 		// 他のオブジェクトを作るかもしれないとこ
@@ -331,13 +345,12 @@ class Rail{
 		this.bind = false; // 離脱できない場合trueになる
 		this.acceleration = undefined; // 加速度が働くならそれをベクトルで表現する感じで。
 		this.damageFlag = NONE_D; // ダメージレールの場合。敵は乗っかるのでプレイヤーだけ。黄色はアウト。
+		this.lifeCount = Infinity; // 消えるまでのカウント数。無限大なら消えない。
+		this.sleepCount = 0; // 消えてから復活するまでのカウント数。0の場合復活は無し。
+		this.tough = Infinity; // 未実装。プレイヤーが反射でぶつかるかレールに乗ってから離脱時に減らし0になったらkill. 処理はこっちに書く。
+		this.maxTough = Infinity;
 
 		this.setAttribute(param); // ここでもろもろのパラメータ、色などを決める感じ。
-		// this.attribute = attribute; // 属性に応じて色が決まる感じ。
-		// this.lineColor = RAIL_PALETTE[attribute];
-
-		this.lifeCount = Infinity;
-		this.sleepCount = 0;
 
 		this.properFrameCount = 0;
     this.alive = true;
@@ -349,13 +362,29 @@ class Rail{
 		this.move = _move;
 	}
 	setAttribute(param){
+
+		// stopperがtrueになる場合はparamで指定する。
 		if(param.stopper !== undefined){
-			this.stopper = [param.stopper[0], param.stopper[1]]; // stopperがtrueになる場合はparamで指定する。
+			this.stopper = [param.stopper[0], param.stopper[1]];
 		}
+
+		// bindがtrueの場合はparamで指定する。
 		if(param.bind !== undefined){
-			this.bind = param.bind; // bindがtrueの場合はparamで指定する。
+			this.bind = param.bind;
 		}
-		if(param.railType === undefined){ param.railType = NORMAL_R; } // 無記載ならノーマルで固定（デフォルト）
+
+		// 無記載ならノーマルで固定（デフォルト）
+		if(param.railType === undefined){ param.railType = NORMAL_R; }
+
+		// lifeやsleepについて
+		// lifeは消えるまでのカウント数。デフォはInfinity.
+		// sleepは消えた後復活するまでのカウント数。デフォは0. 正の場合sleep状態になりカウントが到達すると復活。
+		if(param.life !== undefined){ this.lifeCount = param.life; }
+		if(param.sleep !== undefined){ this.sleepCount = param.sleep; }
+
+		// toughについて. デフォはInfinity.
+		if(param.tough !== undefined){ this.tough = param.tough; this.maxTough = this.tough; }
+
 		switch(param.railType){
 			case NORMAL_R:
 			  break;
@@ -380,6 +409,11 @@ class Rail{
 		}
 		this.lineColor = color(RAIL_PALETTE[param.railType]);
 	}
+	applyTough(){
+		// toughパラメータについての処理を行う
+		this.tough--;
+		if(this.tough === 0){ this.kill(); }
+	}
 	calcTangentFromProportion(proportion){
 		// proportionに相当する位置の接線方向の単位ベクトルを取得して返す。
 		// 向きも重要。向きはproportionの低い方から高い方。これを意識する場面が存在するので・・・・
@@ -389,6 +423,12 @@ class Rail{
 		const forwardPoint = this.calcPositionFromProportion(forward);
 		const backPoint = this.calcPositionFromProportion(back);
 		return p5.Vector.sub(forwardPoint, backPoint).normalize();
+	}
+	calcLocalVelocity(proportion){
+		// 局所速度を算出するメソッド
+		const curPos = this.calcPositionFromProportion(proportion);
+		const prevPos = this.calcPositionFromProportion(proportion, true);
+		return p5.Vector.sub(curPos, prevPos);
 	}
   isAlive(){
     return this.alive;
@@ -422,10 +462,7 @@ class Rail{
 			}
 		}
 	}
-	setLife(lifeCount, sleepCount = 0){
-		this.lifeCount = lifeCount;
-		this.sleepCount = sleepCount;
-	}
+	/* setLifeは廃止 */
 	setLength(len){
 		// ポインターに長さをセットするんだけど長さが決まってからじゃないといけなくてそこら辺。
 		this.length = len;
@@ -444,6 +481,7 @@ class Rail{
 		this.visible = false;
 		this.vanish = false;
 		this.waitCount = 0;
+		this.tough = this.maxTough; // toughを戻す
 		if(this.pointer !== undefined){ this.pointer.reset(); } // ポインターがあればリセット
 		this.reconstruction(); // コンストラクタでやったようなことを実行するパート
 	}
@@ -559,7 +597,8 @@ class LineRail extends Rail{
 		this.previousP2.set(this.p2);
 		this.velocity.set(this.backup.vx, this.backup.vy);
 	}
-	calcPositionFromProportion(proportion){
+	calcPositionFromProportion(proportion, previous = false){
+		if(previous){ return p5.Vector.lerp(this.previousP1, this.previousP2, proportion); }
 		return p5.Vector.lerp(this.p1, this.p2, proportion);
 	}
 	getCrossing(_object){
@@ -571,12 +610,46 @@ class LineRail extends Rail{
 		const {x:g, y:h} = this.previousP2;
 		const {x:u, y:v} = _object.position;
 		const {x:w, y:z} = _object.previousPosition;
-		const flag_previous = ((w - e) * (h - f) > (z - f) * (g - e) ? 1 : -1);
-		const flag_current = ((u - a) * (d - b) > (v - b) * (c - a) ? 1 : -1);
+		const crit_previous = (w - e) * (h - f) - (z - f) * (g - e);
+		const crit_current = (u - a) * (d - b) - (v - b) * (c - a);
+		const flag_previous = (crit_previous > 0 ? 1 : -1);
+		const flag_current = (crit_current > 0 ? 1 : -1);
 		let proportion = -1;
 		if(flag_previous * flag_current < 0){
-			const det = (c - a) * (v - z) - (u - w) * (d - b);
-	    proportion = ((v - z) * (u - a) + (w - u) * (v - b)) / det;
+			// プレイヤーだけを考慮すると静止状態で乗り移った時にバグるので、
+			// railのpreviousの情報もきちんと使いましょう。
+			const detSum = (u - a) * (h - f) - (v - b) * (g - e) + (w - e) * (d - b) - (z - f) * (c - a);
+			const c_0 = crit_previous;
+			const c_1 = detSum - 2 * crit_previous;
+			const c_2 = crit_current + crit_previous - detSum;
+			// const det = (c - a) * (v - z) - (u - w) * (d - b);
+			let t;
+			if(Math.abs(c_2) < 1e-10){
+				t = -c_0 / c_1;
+				console.log("t = " + t);
+			}else{
+			  const c_3 = Math.sqrt(c_1 * c_1 - 4 * c_0 * c_2);
+			  const value0 = (-c_1 + c_3) * 0.5 / c_2;
+			  const value1 = (-c_1 - c_3) * 0.5 / c_2;
+			  console.log("value0 = " + value0, "value1 = " + value1);
+			  // いずれかが0と1の間に入るはず・・なんだけど。
+			  // 間違えた。これ交点求めるだけでproportionはまた別だった（（
+			  if(value0 > 0 && value0 < 1){
+				  t = value0;
+			  }else{
+				  t = value1;
+			  }
+			}
+			// tは交叉のタイミングなので、このときのproportionをそのまま使う感じにする。
+			// 具体的には交叉点とp1との距離を長さで割る。
+			// distだめだよ。方向の情報がないと・・内積使うか。
+			const q1 = w + t * (u - w) - e - t * (a - e);
+			const q2 = z + t * (v - z) - f - t * (b - f);
+			const q3 = g + t * (c - g) - e - t * (a - e);
+			const q4 = h + t * (d - h) - f - t * (b - f);
+			proportion = (q1 * q3 + q2 * q4) / (this.length * this.length);
+			console.log(proportion);
+	    // proportion = ((v - z) * (u - a) + (w - u) * (v - b)) / det;
 		}
 		return proportion; // 0より小さいか1より大きいときもダメにする。
 	}
@@ -630,8 +703,12 @@ class CircleRail extends Rail{
 		this.previousCenter.set(this.center);
 		this.velocity.set(this.backup.vx, this.backup.vy);
 	}
-	calcPositionFromProportion(proportion){
+	calcPositionFromProportion(proportion, previous = false){
 		const angle = proportion * 2 * Math.PI;
+		if(previous){
+			return createVector(this.previousCenter.x + this.radius * Math.cos(angle),
+			                    this.previousCenter.y + this.radius * Math.sin(angle));
+		}
 		return createVector(this.center.x + this.radius * Math.cos(angle), this.center.y + this.radius * Math.sin(angle));
 	}
 	getCrossing(_object){
@@ -718,8 +795,12 @@ class ArcRail extends Rail{
 		this.t2 = this.backup.t2;
 		this.angleSpeed = this.backup.angleSpeed;
 	}
-	calcPositionFromProportion(proportion){
+	calcPositionFromProportion(proportion, previous = false){
 		let angle = this.t1 + proportion * (this.t2 - this.t1);
+		if(previous){
+			return createVector(this.previousCenter.x + this.radius * Math.cos(angle),
+			                    this.previousCenter.y + this.radius * Math.sin(angle));
+		}
 		return createVector(this.center.x + this.radius * Math.cos(angle), this.center.y + this.radius * Math.sin(angle));
 	}
 	getCrossing(_object){
@@ -908,7 +989,12 @@ class MovingObject{
 	}
 	derailment(){
 		// レールから離脱する。
-		// 速度はそのまま。
+
+		// 速度はそのままって思ってたけどレールの速度を足した方がいいかもしれない
+		// proportionを使って前と後で比べて局所速度出してmanualVelocityの方に足す。加速度関係ないので。
+		this.manualVelocity.add(this.belongingData.rail.calcLocalVelocity(this.belongingData.proportion));
+
+	  // パラメータのクリア
 		this.belongingData.isBelonging = false;
 		this.belongingData.rail = undefined;
 		this.belongingData.proportion = undefined;
@@ -1007,7 +1093,13 @@ class Player extends MovingObject{
 		switch(_rail.damageFlag){
 			case NONE_D:
 			  if(this.waitCount > 0){ return false; } // 待ち状態で通常のレールに乗る場合、処理は行わない。
-			  this.setRail(_rail, proportion); return true;
+			  this.setRail(_rail, proportion);
+				// 乗換の際のtough適用
+				const _prevRail = this.belongingData.prevRail;
+				if(_prevRail !== undefined && _prevRail.id !== _rail.id){
+					_prevRail.applyTough();
+				}
+				return true;
 			case ALL_D:
 			  this.kill(); return true;
 			case ONRAIL_D:
@@ -1042,12 +1134,12 @@ class Player extends MovingObject{
 		if(inputX){
 			this.manualVelocity.x += inputX * PLAYER_MANUALACCELERATION;
 		}else{
-			this.manualVelocity.mult(PLAYER_SPEEDDOWN_COEFFICIENT);
+			this.manualVelocity.x *= PLAYER_SPEEDDOWN_COEFFICIENT;
 		}
 		if(inputY){
 			this.manualVelocity.y += inputY * PLAYER_MANUALACCELERATION;
 		}else{
-			this.manualVelocity.mult(PLAYER_SPEEDDOWN_COEFFICIENT);
+			this.manualVelocity.y *= PLAYER_SPEEDDOWN_COEFFICIENT;
 		}
 		if(this.manualVelocity.mag() > 0.0 && this.manualVelocity.mag() < PLAYER_SPEED_LOWERLIMIT){
 			this.manualVelocity.set(0, 0);
@@ -1064,6 +1156,7 @@ class Player extends MovingObject{
 					this.manualVelocity.set(0, 0); // はじっこで止まる場合
 					this.accellVelocity.set(0, 0); // どっちも0にする
 				}else{
+					_rail.applyTough(); // 端っこから外れる場合もtough適用
 					this.derailment(); // 外れる
 				}
 			}
@@ -1073,6 +1166,7 @@ class Player extends MovingObject{
 					this.manualVelocity.set(0, 0); // はじっこで止まる場合
 					this.accellVelocity.set(0, 0); // どっちも0にする
 				}else{
+					_rail.applyTough(); // 端っこから外れる場合
 					this.derailment(); // 外れる
 				}
 			}
@@ -1100,12 +1194,24 @@ class Player extends MovingObject{
 		// ちなみにこの処理の中ではじっこから飛び出してoffRailになる場合があって、その場合は速度をいじらないので、
 		// その速度のままoffRailであるものとして位置を更新する。そうするしかないでしょう。
 
-    // ジャンプや離脱の命令が出ている場合はそのように処理して終わり
-		if(this.jumpFlag){ this.jump(); this.jumpFlag = false; return; }
-		if(this.derailFlag){ this.derailment(); this.derailFlag = false; return; }
-
-    let data = this.belongingData;
+		let data = this.belongingData;
 		const _rail = data.rail;
+
+    // ジャンプや離脱の命令が出ている場合はそのように処理して終わり
+		// toughの適用を追加
+		if(this.jumpFlag){
+			_rail.applyTough();
+			this.jump();
+			this.jumpFlag = false;
+			return;
+		}
+		if(this.derailFlag){
+			_rail.applyTough();
+			this.derailment();
+			this.derailFlag = false;
+			return;
+		}
+
 		const tangent = _rail.calcTangentFromProportion(data.proportion); // 接線単位ベクトル。何かと使うので。
 		if(_rail.force){
 			const pointer = _rail.pointer;
@@ -1141,6 +1247,8 @@ class Player extends MovingObject{
 		const arrowKeyInput = this.getArrowKeyInput(); // {x:0か1か-1, y:0か1か-1} xが水平でyが垂直。
 		// y成分は強制的に無視する。つまり減速して0になる。
 		this.controlManualVelocity(arrowKeyInput.x, 0);
+		// x成分はやはり減衰させないといけないだろ（おかしくなる、色々）
+		this.accellVelocity.x *= PLAYER_SPEEDDOWN_COEFFICIENT;
 		this.accellVelocity.y += GRAVITY_ACCELERATION;
 		this.velocityAdjustment();
 	}
@@ -1184,6 +1292,8 @@ class Player extends MovingObject{
 	}
 }
 
+// キー入力が全くなされないPlayerみたいなのをイメージしてる（加速の影響とかも受ける）
+// 敵として扱うのも可能かもだし
 class SampleObject extends MovingObject{
 	constructor(){
 		super();
