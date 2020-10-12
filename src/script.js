@@ -172,11 +172,18 @@ class System{
 		let _rail4 = new LineRail({tough:1, sleep:60}, 380, 400, 440, 420);
 		let _rail5 = new LineRail({tough:1, sleep:60}, 460, 400, 520, 420);
 		let _rail6 = new LineRail({tough:1, sleep:60}, 560, 400, 660, 420);
+		let _rail7 = new LineRail({}, 200, 350, 500, 350);
 		_rail0.setMove((_rail) => {
 			_rail.p1.set(50, 100 + Math.abs((_rail.properFrameCount % 600) - 300));
       _rail.p2.set(250, 60 + Math.abs((_rail.properFrameCount % 600) - 300));
 		})
-		this.rails.push(...[_rail0, _rail1, _rail2, _rail3, _rail4, _rail5, _rail6]);
+		_rail7.setMove((_rail) => {
+			// 簡単な回転ムーブ
+			const q7 = (_rail.properFrameCount % 240) * Math.PI / 120;
+			_rail.p1.set(350 - 150 * cos(q7), 350 - 150 * sin(q7));
+			_rail.p2.set(350 + 150 * cos(q7), 350 + 150 * sin(q7));
+		})
+		this.rails.push(...[_rail0, _rail1, _rail2, _rail3, _rail4, _rail5, _rail6, _rail7]);
 	}
   createObjects(){
 		// 他のオブジェクトを作るかもしれないとこ
@@ -290,7 +297,16 @@ class System{
 	}
 	update(){
     // クリエイト部分は一旦なくす。
-		for(let _rail of this.rails){ _rail.update(); }
+		for(let _rail of this.rails){
+			// _railがaliveでなければparticleを出す
+			if(!_rail.isAlive()){
+				let prg = _rail.properFrameCount / RAIL_VANISH_SPAN;
+				prg = prg * prg * (3.0 - 2.0 * prg);
+				const {x, y} = _rail.calcPositionFromProportion(prg);
+				this.particles.push(new Particle(x, y, 6, _rail.lineColor, 15, 3, 1));
+			}
+			_rail.update();
+		}
 		for(let _object of this.objects){ _object.update(); }
 		for(let _particle of this.particles){ _particle.update(); }
 		this.crossingCheck();
@@ -618,20 +634,20 @@ class LineRail extends Rail{
 		if(flag_previous * flag_current < 0){
 			// プレイヤーだけを考慮すると静止状態で乗り移った時にバグるので、
 			// railのpreviousの情報もきちんと使いましょう。
+			// まあ横着はいかんよね。
 			const detSum = (u - a) * (h - f) - (v - b) * (g - e) + (w - e) * (d - b) - (z - f) * (c - a);
 			const c_0 = crit_previous;
 			const c_1 = detSum - 2 * crit_previous;
 			const c_2 = crit_current + crit_previous - detSum;
-			// const det = (c - a) * (v - z) - (u - w) * (d - b);
 			let t;
 			if(Math.abs(c_2) < 1e-10){
 				t = -c_0 / c_1;
-				console.log("t = " + t);
+				//console.log("t = " + t);
 			}else{
 			  const c_3 = Math.sqrt(c_1 * c_1 - 4 * c_0 * c_2);
 			  const value0 = (-c_1 + c_3) * 0.5 / c_2;
 			  const value1 = (-c_1 - c_3) * 0.5 / c_2;
-			  console.log("value0 = " + value0, "value1 = " + value1);
+			  //console.log("value0 = " + value0, "value1 = " + value1);
 			  // いずれかが0と1の間に入るはず・・なんだけど。
 			  // 間違えた。これ交点求めるだけでproportionはまた別だった（（
 			  if(value0 > 0 && value0 < 1){
@@ -648,8 +664,7 @@ class LineRail extends Rail{
 			const q3 = g + t * (c - g) - e - t * (a - e);
 			const q4 = h + t * (d - h) - f - t * (b - f);
 			proportion = (q1 * q3 + q2 * q4) / (this.length * this.length);
-			console.log(proportion);
-	    // proportion = ((v - z) * (u - a) + (w - u) * (v - b)) / det;
+			//console.log(proportion);
 		}
 		return proportion; // 0より小さいか1より大きいときもダメにする。
 	}
@@ -1319,6 +1334,8 @@ class Enemy extends MovingObject{
 // とりあえずプレイヤーがやられたときに出す。30フレームくらいで。消えるときのモーションはなくす。とはいえ、
 // なんか用意するかもしれないからとりあえず描画をやめるだけ。
 // まあとりあえず青バージョンと赤バージョンをプレイヤーに持たせてそれぞれ使う前に初期化して運用しましょう。
+
+// もういっそオブジェクト与えて作った方がいいかもね。
 
 class Particle{
 	constructor(x, y, size, _color, lifeCount = 60, speed = 4, count = 20){
