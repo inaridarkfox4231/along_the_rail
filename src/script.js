@@ -64,7 +64,8 @@ const ACCELL_R = 2; // 加速度がかかるレール（離脱可能）
 const ALL_KILL_R = 3;   // 通過すると即死のレール
 const ONRAIL_KILL_R = 4;  // レールに乗ってない時通過できるが、レールに乗っているとき通過すると即死のレール
 const OFFRAIL_KILL_R = 5; // レールに乗っていると通過できるが、レールに乗っていないとき通過すると即死のレール
-const GOAL_R = 6; // ゴールライン。通過するとステージクリア。ライムがいいなーライムにしよ。
+const REFLECT_R = 6; // 反射（ターコイズ）
+const GOAL_R = 7; // ゴールライン。通過するとステージクリア。ライムがいいなーライムにしよ。
 // 条件を満たすと現れるゴールライン、っていうのもいいね。仕事中に考えてた。
 
 // ダメージレールのフラグ
@@ -72,9 +73,10 @@ const NONE_D = 0; // ダメージを受けない通常のレール。基本的�
 const ALL_D = 1; // 即死(magenta)
 const ONRAIL_D = 2; // レールに乗っているとき即死(red)
 const OFFRAIL_D = 3; // レールに乗っていない時即死(blue)
+const REFLECT_D = 4; // 反射
 
 // これ使う。だからメソッドは廃止で。
-const RAIL_PALETTE = ["silver", "lightgreen", "pink", "magenta", "red", "blue", "lime"];
+const RAIL_PALETTE = ["silver", "lightgreen", "pink", "magenta", "red", "blue", "turquoise", "lime"];
 
 const ONRAIL_PLAYER_COLOR = "dodgerblue"; // レールに乗ってるときのオブジェクトの色（青）
 const OFFRAIL_PLAYER_COLOR = "tomato"; // レールに乗ってない時のオブジェクトの色（赤)
@@ -165,7 +167,6 @@ class System{
 		let _rail9 = new LineRail({railType:ACCELL_R, acceleration:createVector(0.2, 0), bind:true}, 50, 320, 350, 360);
 		this.rails.push(...[_rail3, _rail1, _rail2, _rail0, _rail4, _rail5, _rail6, _rail7, _rail8, _rail9]);
 		*/
-		let _rail0 = new LineRail({}, 50, 400, 250, 360);
 		let _rail1 = new LineRail({tough:1, sleep:60}, 100, 360, 200, 460);
 		let _rail2 = new LineRail({tough:1, sleep:60}, 200, 360, 100, 460);
 		let _rail3 = new LineRail({tough:1, sleep:60}, 300, 400, 360, 420);
@@ -173,17 +174,14 @@ class System{
 		let _rail5 = new LineRail({tough:1, sleep:60}, 460, 400, 520, 420);
 		let _rail6 = new LineRail({tough:1, sleep:60}, 560, 400, 660, 420);
 		let _rail7 = new LineRail({}, 200, 350, 500, 350);
-		_rail0.setMove((_rail) => {
-			_rail.p1.set(50, 100 + Math.abs((_rail.properFrameCount % 600) - 300));
-      _rail.p2.set(250, 60 + Math.abs((_rail.properFrameCount % 600) - 300));
-		})
+		let _rail8 = new LineRail({railType:REFLECT_R}, 50, 200, 250, 200); // 200のところ。
 		_rail7.setMove((_rail) => {
 			// 簡単な回転ムーブ
 			const q7 = (_rail.properFrameCount % 240) * Math.PI / 120;
 			_rail.p1.set(350 - 150 * cos(q7), 350 - 150 * sin(q7));
 			_rail.p2.set(350 + 150 * cos(q7), 350 + 150 * sin(q7));
 		})
-		this.rails.push(...[_rail0, _rail1, _rail2, _rail3, _rail4, _rail5, _rail6, _rail7]);
+		this.rails.push(...[_rail1, _rail2, _rail3, _rail4, _rail5, _rail6, _rail7, _rail8]);
 	}
   createObjects(){
 		// 他のオブジェクトを作るかもしれないとこ
@@ -303,7 +301,7 @@ class System{
 				let prg = _rail.properFrameCount / RAIL_VANISH_SPAN;
 				prg = prg * prg * (3.0 - 2.0 * prg);
 				const {x, y} = _rail.calcPositionFromProportion(prg);
-				this.particles.push(new Particle(x, y, 6, _rail.lineColor, 15, 3, 1));
+				this.particles.push(new Particle(x, y, 6, _rail.lineColor, 15, 3, 2));
 			}
 			_rail.update();
 		}
@@ -422,6 +420,9 @@ class Rail{
 			case OFFRAIL_KILL_R:
 			  this.damageFlag = OFFRAIL_D;
 				break;
+			case REFLECT_R:
+			  this.damageFlag = REFLECT_D;
+				break;
 		}
 		this.lineColor = color(RAIL_PALETTE[param.railType]);
 	}
@@ -439,6 +440,12 @@ class Rail{
 		const forwardPoint = this.calcPositionFromProportion(forward);
 		const backPoint = this.calcPositionFromProportion(back);
 		return p5.Vector.sub(forwardPoint, backPoint).normalize();
+	}
+	calcNormalFromProportion(proportion){
+		// proportionに相当する位置における法線ベクトルを。
+		// こっちは本当に向きどうでもいいといいたいけど一応0から1に向かうベクトルを時計回りにPI/2です。
+		const v = this.calcTangentFromProportion(proportion);
+		return v.rotate(Math.PI * 0.5);
 	}
 	calcLocalVelocity(proportion){
 		// 局所速度を算出するメソッド
@@ -1121,8 +1128,35 @@ class Player extends MovingObject{
 			  if(this.belongingData.isBelonging){ this.kill(); return true; } break;
 			case OFFRAIL_D:
 			  if(!this.belongingData.isBelonging){ this.kill(); return true; } break;
+			case REFLECT_D:
+			  if(this.waitCount > 0){ return false; }
+			  this.reflection(_rail, proportion);
+				return true;
 		}
 		return false;
+	}
+	reflection(_rail, proportion){
+		console.log("pre", this.manualVelocity.mag(), this.accellVelocity.mag());
+		console.log(this.position.y);
+		// 位置補正忘れないでねそれ忘れるとバグるからね
+		const touchPoint = _rail.calcPositionFromProportion(proportion);
+		const n = _rail.calcNormalFromProportion(proportion);
+		const v = _rail.calcLocalVelocity(proportion);
+		this.manualVelocity.sub(v);
+		this.accellVelocity.sub(v);
+		// vec = vec - 2 * (vec, n)n.
+		const k1 = 2.0 * p5.Vector.dot(n, this.manualVelocity);
+		this.manualVelocity.sub(p5.Vector.mult(n, k1));
+		const k2 = 2.0 * p5.Vector.dot(n, this.accellVelocity);
+		this.accellVelocity.sub(p5.Vector.mult(n, k2));
+		this.manualVelocity.add(v);
+		this.accellVelocity.add(v);
+		this.position.set(touchPoint);
+		// これで根本的な解決になるわけじゃないけど・・
+		// まあ普通のゲーム作ってるわけじゃないし仕方ないか。連続反射ですりぬけちゃうねこれだと。
+		this.waitCount = OBJECT_UNRIDE_SPAN;
+		console.log(this.position.y);
+		console.log("after", this.manualVelocity.mag(), this.accellVelocity.mag());
 	}
 	setDerailFlag(){
 		// キー入力で使う（シフト）
@@ -1194,8 +1228,12 @@ class Player extends MovingObject{
 	velocityAdjustment(){
 		const mMag = this.manualVelocity.mag();
 		const aMag = this.accellVelocity.mag();
-		if(mMag > PLAYER_MANUALSPEED_LIMIT){ this.manualVelocity.mult(PLAYER_MANUALSPEED_LIMIT / mMag); }
-		if(aMag > PLAYER_ACCELLSPEED_LIMIT){ this.accellVelocity.mult(PLAYER_ACCELLSPEED_LIMIT / aMag); }
+		if(mMag > PLAYER_MANUALSPEED_LIMIT){
+			this.manualVelocity.mult(PLAYER_MANUALSPEED_LIMIT / mMag);
+		}
+		if(aMag > PLAYER_ACCELLSPEED_LIMIT){
+			this.accellVelocity.mult(PLAYER_ACCELLSPEED_LIMIT / aMag);
+		}
 	}
 	jump(){
 		// ジャンプしてレールを離脱する（onRail→offRailのパターンしかない、常にレールに乗っているので）。
