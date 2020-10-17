@@ -328,6 +328,74 @@ class System{
 }
 
 // ------------------------------------------------------------------------------------------------- //
+// State.
+
+class GameState{
+	constructor(){
+		this.board = createGraphics(AREA_WIDTH, AREA_HEIGHT);
+	}
+	update(){
+
+	}
+	draw(){
+
+	}
+}
+
+// タイルがたくさん並んでる。
+class SelectState extends GameState{
+	constructor(){
+		super();
+		this.board = createGraphics(AREA_WIDTH, AREA_HEIGHT);
+	}
+}
+
+// Stageを実行するだけの媒介。
+class PlayState extends GameState{
+	constructor(){
+		super();
+		this.board = createGraphics(AREA_WIDTH, AREA_HEIGHT);
+		this.currentStage = undefined; // セレクト側がメソッドにより決める感じ
+	}
+	setStage(){
+		this.currentStage.draw(this.board);
+		image(this.board, 0, 0);
+	}
+}
+
+// ------------------------------------------------------------------------------------------------- //
+// Stage.
+// ステージごとの横と縦が用意されててその範囲でレールやオブジェクトを配置する
+// 表示サイズに合わせてオフセットを決めてその範囲で描画する
+// レールやオブジェクトの更新もここで行なう
+
+// createStageはグローバルで作る(seedから作る)
+// 内容的には今あっちでやってるやつの権限移譲って感じで。
+// 背景情報もseedに入ってるはずです（多分）
+// オフセット処理を背景でどうにかするのも入ってるはず・・
+
+class Stage{
+	constructor(){
+		this.rails = [];
+		this.objects = [];
+		this.particles = [];
+		this.bg = createGraphics(AREA_WIDTH, AREA_HEIGHT);
+	}
+	// 各種メソッドもすべて今Systemに書いてあることを移植する
+	update(){
+    // 具体的には今Systemであれこれやってることをそのまま移すだけ
+	}
+	draw(gr){
+		// grでいろいろやる感じ
+		// 背景用意してからいろいろ描画
+	}
+}
+
+function createStage(seed){
+  let _stage = new Stage();
+}
+
+// ------------------------------------------------------------------------------------------------- //
 // rail.
 
 // 動くものと動かないもの
@@ -1136,8 +1204,6 @@ class Player extends MovingObject{
 		return false;
 	}
 	reflection(_rail, proportion){
-		console.log("pre", this.manualVelocity.mag(), this.accellVelocity.mag());
-		console.log(this.position.y);
 		// 位置補正忘れないでねそれ忘れるとバグるからね
 		const touchPoint = _rail.calcPositionFromProportion(proportion);
 		const n = _rail.calcNormalFromProportion(proportion);
@@ -1155,8 +1221,6 @@ class Player extends MovingObject{
 		// これで根本的な解決になるわけじゃないけど・・
 		// まあ普通のゲーム作ってるわけじゃないし仕方ないか。連続反射ですりぬけちゃうねこれだと。
 		this.waitCount = OBJECT_UNRIDE_SPAN;
-		console.log(this.position.y);
-		console.log("after", this.manualVelocity.mag(), this.accellVelocity.mag());
 	}
 	setDerailFlag(){
 		// キー入力で使う（シフト）
