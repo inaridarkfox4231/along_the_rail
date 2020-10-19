@@ -175,13 +175,15 @@ class System{
 		let _rail6 = new LineRail({tough:1, sleep:60}, 560, 400, 660, 420);
 		let _rail7 = new LineRail({}, 200, 350, 500, 350);
 		let _rail8 = new LineRail({railType:REFLECT_R}, 50, 200, 250, 200); // 200のところ。
+		let _rail9 = new CircleRail({tough:1, sleep:60}, 480, 200, 100);
+		let _rail10 = new ArcRail({tough:1, sleep:60}, 700, 250, 100, PI / 2, PI);
 		_rail7.setMove((_rail) => {
 			// 簡単な回転ムーブ
 			const q7 = (_rail.properFrameCount % 240) * Math.PI / 120;
 			_rail.p1.set(350 - 150 * cos(q7), 350 - 150 * sin(q7));
 			_rail.p2.set(350 + 150 * cos(q7), 350 + 150 * sin(q7));
 		})
-		this.rails.push(...[_rail1, _rail2, _rail3, _rail4, _rail5, _rail6, _rail7, _rail8]);
+		this.rails.push(...[_rail1, _rail2, _rail3, _rail4, _rail5, _rail6, _rail7, _rail8, _rail9, _rail10]);
 	}
   createObjects(){
 		// 他のオブジェクトを作るかもしれないとこ
@@ -300,8 +302,12 @@ class System{
 			if(!_rail.isAlive()){
 				let prg = _rail.properFrameCount / RAIL_VANISH_SPAN;
 				prg = prg * prg * (3.0 - 2.0 * prg);
-				const {x, y} = _rail.calcPositionFromProportion(prg);
-				this.particles.push(new Particle(x, y, 6, _rail.lineColor, 15, 3, 2));
+				const prg_l = 0.5 * (1.0 - prg);
+				const prg_r = 0.5 * (1.0 + prg);
+				const {x:xl, y:yl} = _rail.calcPositionFromProportion(prg_l);
+				const {x:xr, y:yr} = _rail.calcPositionFromProportion(prg_r);
+				this.particles.push(new Particle(xl, yl, 6, _rail.lineColor, 15, 3, 1));
+				this.particles.push(new Particle(xr, yr, 6, _rail.lineColor, 15, 3, 1));
 			}
 			_rail.update();
 		}
@@ -768,11 +774,18 @@ class LineRail extends Rail{
 	}
 	drawAppearingRail(prg){
 		prg = prg * prg * (3.0 - 2.0 * prg);
-		line(this.p1.x, this.p1.y, this.p1.x + (this.p2.x - this.p1.x) * prg, this.p1.y + (this.p2.y - this.p1.y) * prg);
+		const prg_l = 0.5 * (1.0 - prg);
+		const prg_r = 0.5 * (1.0 + prg);
+		line(this.p1.x + (this.p2.x - this.p1.x) * prg_l, this.p1.y + (this.p2.y - this.p1.y) * prg_l,
+		     this.p1.x + (this.p2.x - this.p1.x) * prg_r, this.p1.y + (this.p2.y - this.p1.y) * prg_r);
 	}
 	drawVanishingRail(prg){
 		prg = prg * prg * (3.0 - 2.0 * prg);
-		line(this.p1.x + (this.p2.x - this.p1.x) * prg, this.p1.y + (this.p2.y - this.p1.y) * prg, this.p2.x, this.p2.y);
+		const prg_l = 0.5 * (1.0 - prg);
+		const prg_r = 0.5 * (1.0 + prg);
+		// パーティクルはこの2つのprgの位置に出現させる。
+		line(this.p1.x, this.p1.y, this.p1.x + (this.p2.x - this.p1.x) * prg_l, this.p1.y + (this.p2.y - this.p1.y) * prg_l);
+		line(this.p1.x + (this.p2.x - this.p1.x) * prg_r, this.p1.y + (this.p2.y - this.p1.y) * prg_r, this.p2.x, this.p2.y);
 	}
 }
 
@@ -846,12 +859,18 @@ class CircleRail extends Rail{
 		}
 	}
 	drawAppearingRail(prg){
+		prg += 1 / RAIL_APPEAR_SPAN; // こうしないと円のフラッシュができるっぽい
 		prg = prg * prg * (3.0 - 2.0 * prg);
-		arc(this.center.x, this.center.y, this.radius * 2, this.radius * 2, 0, prg * 2 * Math.PI);
+		const prg_l = 0.5 * (1.0 - prg);
+		const prg_r = 0.5 * (1.0 + prg);
+		arc(this.center.x, this.center.y, this.radius * 2, this.radius * 2, prg_l * 2 * Math.PI, prg_r * 2 * Math.PI);
 	}
 	drawVanishingRail(prg){
 		prg = prg * prg * (3.0 - 2.0 * prg);
-		arc(this.center.x, this.center.y, this.radius * 2, this.radius * 2, prg * 2 * Math.PI, 2 * Math.PI);
+		const prg_l = 0.5 * (1.0 - prg);
+		const prg_r = 0.5 * (1.0 + prg);
+		arc(this.center.x, this.center.y, this.radius * 2, this.radius * 2, 0, prg_l * 2 * Math.PI);
+		arc(this.center.x, this.center.y, this.radius * 2, this.radius * 2, prg_r * 2 * Math.PI, 2 * Math.PI);
 	}
 }
 
@@ -951,12 +970,19 @@ class ArcRail extends Rail{
 		}
 	}
 	drawAppearingRail(prg){
+		prg += 1 / RAIL_APPEAR_SPAN;
 		prg = prg * prg * (3.0 - 2.0 * prg);
-		arc(this.center.x, this.center.y, this.radius * 2, this.radius * 2, this.t1, this.t1 + (this.t2 - this.t1) * prg);
+		const prg_l = 0.5 * (1.0 - prg);
+		const prg_r = 0.5 * (1.0 + prg);
+		arc(this.center.x, this.center.y, this.radius * 2, this.radius * 2,
+			  this.t1 + (this.t2 - this.t1) * prg_l, this.t1 + (this.t2 - this.t1) * prg_r);
 	}
 	drawVanishingRail(prg){
 		prg = prg * prg * (3.0 - 2.0 * prg);
-		arc(this.center.x, this.center.y, this.radius * 2, this.radius * 2, this.t1 + (this.t2 - this.t1) * prg, this.t2);
+		const prg_l = 0.5 * (1.0 - prg);
+		const prg_r = 0.5 * (1.0 + prg);
+		arc(this.center.x, this.center.y, this.radius * 2, this.radius * 2, this.t1, this.t1 + (this.t2 - this.t1) * prg_l);
+		arc(this.center.x, this.center.y, this.radius * 2, this.radius * 2, this.t1 + (this.t2 - this.t1) * prg_r, this.t2);
 	}
 }
 
